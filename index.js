@@ -1,3 +1,12 @@
+const ColorPalette = {
+    red: '#ff6b6b',
+    green: '#51cf66',
+    blue: '#339af0',
+    yellow: '#fcc419',
+    purple: '#cc5de8',
+    orange: '#ff922b'
+};
+
 const QuizUI = {
     createQuestionContainer() {
         const qContainer = document.createElement('div');
@@ -8,10 +17,11 @@ const QuizUI = {
         qContainer.style.minHeight = '25rem';
         qContainer.style.marginBottom = '1.25rem';
         qContainer.style.padding = '1rem';
-        qContainer.style.border = '0.0625rem solid #ddd';
+        qContainer.style.border = '0.0625rem solid #444';
         qContainer.style.borderRadius = '0.5rem';
         qContainer.style.boxSizing = 'border-box';
-        qContainer.style.backgroundColor = '#fff';
+        qContainer.style.backgroundColor = '#252525';
+        qContainer.style.textShadow = '0.0625rem 0.0625rem 0.0625rem rgba(0,0,0,0.5)';
         return qContainer;
     },
 
@@ -58,7 +68,7 @@ const QuizUI = {
             const span = document.createElement('span');
             span.textContent = part.text;
             if (part.color) {
-                span.style.color = part.color;
+                span.style.color = ColorPalette[part.color] || part.color;
                 span.style.fontWeight = 'bold';
             }
             container.appendChild(span);
@@ -90,9 +100,9 @@ const QuizUI = {
             btn.style.alignItems = 'center';
             btn.style.justifyContent = 'center';
             btn.style.borderRadius = '0.5rem';
-            btn.style.border = '0.0625rem solid #ccc';
-            btn.style.backgroundColor = '#f8f9fa';
-            btn.style.color = '#333';
+            btn.style.border = '0.0625rem solid #444';
+            btn.style.backgroundColor = '#2c2c2c';
+            btn.style.color = '#e0e0e0';
             btn.style.cursor = 'pointer';
             btn.style.userSelect = 'none';
             btn.style.padding = '0';
@@ -107,7 +117,7 @@ const QuizUI = {
                 const subSpan = document.createElement('span');
                 subSpan.textContent = key.sub;
                 subSpan.style.fontSize = '0.6rem';
-                subSpan.style.color = '#666';
+                subSpan.style.color = '#999';
                 btn.appendChild(subSpan);
             }
 
@@ -126,7 +136,7 @@ const QuizUI = {
         display.style.width = '100%';
         display.style.padding = '0.5rem';
         display.style.fontSize = '1.5rem';
-        display.style.border = '0.0625rem solid #ccc';
+        display.style.border = '0.0625rem solid #444';
         display.style.borderRadius = '0.25rem';
         display.style.marginBottom = '0.5rem';
         display.style.minHeight = '2.5rem';
@@ -134,7 +144,8 @@ const QuizUI = {
         display.style.alignItems = 'center';
         display.style.justifyContent = 'center';
         display.style.boxSizing = 'border-box';
-        display.style.backgroundColor = '#fff';
+        display.style.backgroundColor = '#1a1a1a';
+        display.style.color = '#e0e0e0';
         return display;
     }
 };
@@ -376,6 +387,11 @@ function createArithmeticQuestions() {
                 ctx.stimuli = [];
                 ctx.rulePool = [];
                 ctx.stimuliByPhase = {};
+                ctx.availableRules = [];
+            }
+
+            if (ctx.phase > 6) {
+                return null;
             }
 
             const totalIncorrect = ctx.results.filter(r => !r.correct).length;
@@ -393,29 +409,29 @@ function createArithmeticQuestions() {
 
             // Sub-phase 1: Stimuli
             if (ctx.stimuliShown < ctx.phase) {
+                if (!ctx.availableRules || ctx.availableRules.length === 0) {
+                    const allRules = [
+                        { op: '+', val: 2 }, { op: '+', val: 3 }, { op: '+', val: 4 },
+                        { op: '∙', val: 2 }, { op: '∙', val: 3 }, { op: '∙', val: 4 }
+                    ];
+                    ctx.availableRules = allRules.sort(() => Math.random() - 0.5);
+                }
+
                 const colors = ["red", "green", "blue", "yellow", "purple", "orange"];
                 const usedColors = ctx.stimuli.map(s => s.color);
                 const availableColors = colors.filter(c => !usedColors.includes(c));
                 
-                const color = availableColors.length > 0 
-                    ? availableColors[Math.floor(Math.random() * availableColors.length)]
-                    : colors[Math.floor(Math.random() * colors.length)];
+                const color = availableColors[Math.floor(Math.random() * availableColors.length)];
                 
-                let op, val;
-                const isDuplicateRule = (o, v) => ctx.phase === 2 && ctx.stimuli.some(s => s.op === o && s.val === v);
-                do {
-                    op = getRandomOp();
-                    val = getRandomVal();
-                } while (isDuplicateRule(op, val));
-                
-                const stimulus = { color, op, val };
+                const rule = ctx.availableRules.pop();
+                const stimulus = { color, op: rule.op, val: rule.val };
                 ctx.stimuli.push(stimulus);
                 ctx.stimuliByPhase[ctx.phase] = ctx.stimuli;
                 ctx.stimuliShown++;
 
                 const prompt = QuizUI.createQuestionPrompt(`Phase ${ctx.phase}: Remember`);
-                const body = QuizUI.createQuestionBody(`${color} ${op} ${val}`);
-                body.style.color = color;
+                const body = QuizUI.createQuestionBody(`${color} ${rule.op} ${rule.val}`);
+                body.style.color = ColorPalette[color] || color;
                 body.style.fontWeight = 'bold';
                 body.style.fontSize = '2rem';
                 body.style.textAlign = 'center';
@@ -499,6 +515,7 @@ function createArithmeticQuestions() {
             ctx.questionsDone = 0;
             ctx.stimuli = [];
             ctx.rulePool = [];
+            ctx.availableRules = [];
             return this.next(ctx);
         }
     };
@@ -548,7 +565,7 @@ window.addEventListener('load', () => {
             });
 
             let historyHtml = `
-                <div style="margin-top: 2rem; text-align: left; max-width: 40rem; margin-left: auto; margin-right: auto; border-top: 0.125rem solid #eee; padding-top: 1.25rem;">
+                <div style="margin-top: 2rem; text-align: left; max-width: 40rem; margin-left: auto; margin-right: auto; border-top: 0.125rem solid #333; padding-top: 1.25rem; text-shadow: 0.0625rem 0.0625rem 0.0625rem rgba(0,0,0,0.5);">
                     <h3 style="text-align: center; margin-bottom: 1.25rem;">Answer Key</h3>
             `;
 
@@ -559,17 +576,17 @@ window.addEventListener('load', () => {
 
                 historyHtml += `
                     <div style="margin-bottom: 2rem;">
-                        <h4 style="border-bottom: 1px solid #ddd; padding-bottom: 0.3rem; margin-bottom: 0.6rem;">Phase ${phaseNum}</h4>
+                        <h4 style="border-bottom: 1px solid #444; padding-bottom: 0.3rem; margin-bottom: 0.6rem;">Phase ${phaseNum}</h4>
                         <div style="margin-bottom: 0.8rem; font-size: 0.95rem;">
                             <strong>Rules:</strong> 
-                            ${stimuli.map(s => `<span style="color: ${s.color}; font-weight: bold; margin-right: 0.8rem;">${s.color} ${s.op} ${s.val}</span>`).join('')}
+                            ${stimuli.map(s => `<span style="color: ${ColorPalette[s.color] || s.color}; font-weight: bold; margin-right: 0.8rem;">${s.color} ${s.op} ${s.val}</span>`).join('')}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem;">
                 `;
 
                 phaseResults.forEach((r, idx) => {
                     const qDisplay = r.parts.map(p => {
-                        if (p.color) return `<span style="color: ${p.color}; font-weight: bold;">${p.text}</span>`;
+                        if (p.color) return `<span style="color: ${ColorPalette[p.color] || p.color}; font-weight: bold;">${p.text}</span>`;
                         return p.text;
                     }).join('');
 
@@ -578,11 +595,11 @@ window.addEventListener('load', () => {
                         : '<span style="color: #f44336; font-weight: bold; margin-right: 0.5rem;">✗</span>';
                     
                     const responseInfo = r.correct 
-                        ? `<span style="color: #666;">Answer: ${r.userAnswer}</span>`
-                        : `<span style="color: #666;">Got: <span style="text-decoration: line-through;">${r.userAnswer || 'none'}</span>, Expected: ${r.correctAnswer}</span>`;
+                        ? `<span style="color: #aaa;">Answer: ${r.userAnswer}</span>`
+                        : `<span style="color: #aaa;">Got: <span style="text-decoration: line-through;">${r.userAnswer || 'none'}</span>, Expected: ${r.correctAnswer}</span>`;
 
                     historyHtml += `
-                        <div style="display: flex; align-items: baseline; border-bottom: 1px dashed #f0f0f0; padding-bottom: 0.2rem;">
+                        <div style="display: flex; align-items: baseline; border-bottom: 1px dashed #333; padding-bottom: 0.2rem;">
                             ${statusIcon}
                             <div style="flex: 1;">
                                 Q${idx + 1}: ${qDisplay} = ${r.correctAnswer}
@@ -601,7 +618,7 @@ window.addEventListener('load', () => {
 
             const app = document.getElementById('app');
             app.innerHTML = `
-                <div style="text-align: center; padding: 1.25rem; border: 0.125rem solid #4CAF50; border-radius: 0.625rem;">
+                <div style="text-align: center; padding: 1.25rem; border: 0.125rem solid #81c784; border-radius: 0.625rem;">
                     <h2 style="font-size: 1.5rem;">Quiz Over!</h2>
                     <p style="font-size: 2rem; font-weight: bold; margin: 1rem 0;">Score: ${finalScore.toFixed(2)}</p>
                     <p style="font-size: 1.1rem;">Total Time: ${duration} seconds</p>
@@ -624,8 +641,9 @@ window.addEventListener('load', () => {
         devModeContainer.style.bottom = '1rem';
         devModeContainer.style.right = '1rem';
         devModeContainer.style.padding = '0.5rem';
-        devModeContainer.style.backgroundColor = '#fff';
-        devModeContainer.style.border = '1px solid #ccc';
+        devModeContainer.style.backgroundColor = '#1e1e1e';
+        devModeContainer.style.color = '#e0e0e0';
+        devModeContainer.style.border = '1px solid #444';
         devModeContainer.style.borderRadius = '0.25rem';
         devModeContainer.style.zIndex = '9999';
         devModeContainer.style.display = 'flex';
