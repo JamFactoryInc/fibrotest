@@ -394,9 +394,24 @@ function createArithmeticQuestions() {
                 return null;
             }
 
-            const totalIncorrect = ctx.results.filter(r => !r.correct).length;
-            if (totalIncorrect >= 5) {
-                return null;
+            // Termination check: more than 50% failure for any rule in the current phase
+            if (ctx.phase > 0 && ctx.results.length > 0) {
+                const currentPhaseResults = ctx.results.filter(r => r.phase === ctx.phase);
+                if (currentPhaseResults.length > 0 && ctx.ruleCounts) {
+                    const ruleFailures = {};
+                    currentPhaseResults.forEach(r => {
+                        const color = r.stimulus.color;
+                        if (!ruleFailures[color]) ruleFailures[color] = 0;
+                        if (!r.correct) ruleFailures[color]++;
+                    });
+
+                    for (const color in ruleFailures) {
+                        const totalExpected = ctx.ruleCounts[color] || 0;
+                        if (totalExpected > 0 && ruleFailures[color] > (totalExpected / 2)) {
+                            return null;
+                        }
+                    }
+                }
             }
 
             // Phase start: Ready
@@ -442,8 +457,12 @@ function createArithmeticQuestions() {
             // Sub-phase 2: Questions
             if (ctx.questionsDone < 12) {
                 if (ctx.rulePool.length === 0 && ctx.questionsDone === 0) {
+                    ctx.ruleCounts = {};
+                    ctx.stimuli.forEach(s => ctx.ruleCounts[s.color] = 0);
                     for (let i = 0; i < 12; i++) {
-                        ctx.rulePool.push(ctx.stimuli[i % ctx.stimuli.length]);
+                        const s = ctx.stimuli[i % ctx.stimuli.length];
+                        ctx.rulePool.push(s);
+                        ctx.ruleCounts[s.color]++;
                     }
                 }
 
@@ -499,7 +518,8 @@ function createArithmeticQuestions() {
                         correct: isCorrect,
                         userAnswer: forcedResult === true ? correctAnswer.toString() : answer,
                         correctAnswer: correctAnswer.toString(),
-                        parts: questionParts
+                        parts: questionParts,
+                        stimulus: stimulus
                     });
                     return isCorrect;
                 };
@@ -534,35 +554,33 @@ window.addEventListener('load', () => {
         const handleSubmit = (finalCtx) => {
             const duration = Math.round((Date.now() - finalCtx.startTime) / 1000);
             
-            let aggregateScore = 0;
-            finalCtx.results.forEach(r => {
-                if (r.correct) {
-                    aggregateScore += (r.phase / 12.0);
-                }
-            });
-            console.log("Aggregate Score:", aggregateScore);
-
-            const phases = finalCtx.results.map(r => r.phase);
-            const lastPhase = phases.length > 0 ? Math.max(...phases) : 1;
-            const lastPhaseResults = finalCtx.results.filter(r => r.phase === lastPhase);
-            //
-            // console.log("lastPhase:", lastPhase);
-            //
-            // let divisor = 0;
-            // for (let i = 1; i < lastPhase; i++) {
-            //     divisor += 1;
-            // }
-            // console.log("base divisor:", divisor);
-            // divisor += (lastPhaseResults.filter(r => r.correct).length / 12);
-            // console.log("final divisor:", divisor);
-
-            const finalScore = (lastPhase - 1) + (lastPhaseResults.filter(r => r.correct).length / 12);
-
             const resultsByPhase = {};
             finalCtx.results.forEach(r => {
                 if (!resultsByPhase[r.phase]) resultsByPhase[r.phase] = [];
                 resultsByPhase[r.phase].push(r);
             });
+
+            let accumulatedScore = 0;
+            Object.keys(resultsByPhase).sort((a, b) => parseInt(a) - parseInt(b)).forEach(phaseStr => {
+                const phaseNum = parseInt(phaseStr);
+                const phaseResults = resultsByPhase[phaseStr];
+                const stimuli = finalCtx.stimuliByPhase[phaseNum] || [];
+                
+                let phaseAccSum = 0;
+                stimuli.forEach(s => {
+                    const ruleResults = phaseResults.filter(r => r.stimulus && r.stimulus.color === s.color);
+                    if (ruleResults.length > 0) {
+                        const correctCount = ruleResults.filter(r => r.correct).length;
+                        phaseAccSum += (correctCount / ruleResults.length);
+                    }
+                });
+                
+                if (stimuli.length > 0) {
+                    accumulatedScore += (phaseAccSum / stimuli.length);
+                }
+            });
+
+            const finalScore = Number(accumulatedScore.toFixed(1));
 
             let historyHtml = `
                 <div style="margin-top: 2rem; text-align: left; max-width: 40rem; margin-left: auto; margin-right: auto; border-top: 0.125rem solid #333; padding-top: 1.25rem; text-shadow: 0.0625rem 0.0625rem 0.0625rem rgba(0,0,0,0.5);">
@@ -579,7 +597,14 @@ window.addEventListener('load', () => {
                         <h4 style="border-bottom: 1px solid #444; padding-bottom: 0.3rem; margin-bottom: 0.6rem;">Phase ${phaseNum}</h4>
                         <div style="margin-bottom: 0.8rem; font-size: 0.95rem;">
                             <strong>Rules:</strong> 
-                            ${stimuli.map(s => `<span style="color: ${ColorPalette[s.color] || s.color}; font-weight: bold; margin-right: 0.8rem;">${s.color} ${s.op} ${s.val}</span>`).join('')}
+                            ${stimuli.map(s => {
+                                const ruleResults = phaseResults.filter(r => r.stimulus && r.stimulus.color === s.color);
+                                const correct = ruleResults.filter(r => r.correct).length;
+                                const accuracy = ruleResults.length > 0 ? (correct / ruleResults.length) : 0;
+                                const isPassed = accuracy >= 0.5;
+                                const statusStyle = isPassed ? 'border-bottom: 2px solid #4CAF50;' : 'border-bottom: 2px solid #f44336; opacity: 0.6;';
+                                return `<span style="color: ${ColorPalette[s.color] || s.color}; font-weight: bold; margin-right: 0.8rem; ${statusStyle}">${s.color} ${s.op} ${s.val}</span>`;
+                            }).join('')}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.9rem;">
                 `;
@@ -620,7 +645,7 @@ window.addEventListener('load', () => {
             app.innerHTML = `
                 <div style="text-align: center; padding: 1.25rem; border: 0.125rem solid #81c784; border-radius: 0.625rem;">
                     <h2 style="font-size: 1.5rem;">Quiz Over!</h2>
-                    <p style="font-size: 2rem; font-weight: bold; margin: 1rem 0;">Score: ${finalScore.toFixed(2)}</p>
+                    <p style="font-size: 2rem; font-weight: bold; margin: 1rem 0;">Score: ${finalScore}</p>
                     <p style="font-size: 1.1rem;">Total Time: ${duration} seconds</p>
                     ${historyHtml}
                     <button id="retry-btn" style="padding: 0.625rem 1.25rem; cursor: pointer; font-size: 1rem; margin-top: 1.25rem;">Try Again</button>
